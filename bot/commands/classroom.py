@@ -95,7 +95,7 @@ class ClassroomCog(commands.Cog):
                 return
 
             # Format the announcements for display
-            announcements_list = "\n".join(
+            announcements_list = "\n\n".join(
                 [
                     f"**Title**: {ann['title']}\n"
                     f"**Content**: {ann['content'] if ann['content'] else 'No content'}\n"

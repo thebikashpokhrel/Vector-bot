@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 SCOPES = [
     "https://www.googleapis.com/auth/classroom.courses.readonly",
     "https://www.googleapis.com/auth/classroom.announcements",
-    "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
     "https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly",
 ]
 
@@ -83,6 +82,7 @@ def get_credentials(user_id):
                 port=8000, access_type="offline", prompt="consent"
             )
 
+            print(creds)
         # Save the credentials for future use
         save_credentials(user_id, creds)
 
@@ -126,25 +126,37 @@ def list_announcements_by_course(course_id, user_id):
         # Get the Google Classroom service
         service = get_classroom_service(user_id)
 
-        # Fetch announcements for the specific course
-        result = (
+        # Fetch announcements and coursework materials
+        announcements = (
             service.courses().announcements().list(courseId=int(course_id)).execute()
-        )
-        print(
-            service.courses().courseWork().list(courseId=int(course_id)).execute()
-        )  # Debugging: Print the raw API response
-        course_announcements = result.get("announcements", [])
+        ).get("announcements", [])
 
-        # Sort announcements by creationTime in descending order
-        course_announcements.sort(key=lambda x: x.get("creationTime", ""), reverse=True)
+        coursework_materials = (
+            service.courses()
+            .courseWorkMaterials()
+            .list(courseId=int(course_id))
+            .execute()
+        ).get("courseWorkMaterial", [])
 
-        # List to store top 3 announcements
-        announcements = []
+        # Combine announcements and coursework materials into a single list with their type
+        all_items = []
+        for item in announcements:
+            item["type"] = "announcement"
+            all_items.append(item)
+        for item in coursework_materials:
+            item["type"] = "courseWorkMaterial"
+            all_items.append(item)
 
-        # Get the top 3 announcements
-        for index, announcement in enumerate(course_announcements[:3], start=1):
+        # Sort all items by creationTime in descending order
+        all_items.sort(key=lambda x: x.get("creationTime", ""), reverse=True)
+
+        # List to store top 3 items
+        top_items = []
+
+        # Get the top 3 items
+        for index, item in enumerate(all_items[:3], start=1):
             # Extract and format the creationTime
-            creation_time = announcement.get("creationTime", "")
+            creation_time = item.get("creationTime", "")
             posted_date = (
                 datetime.fromisoformat(creation_time.replace("Z", "+00:00")).strftime(
                     "%Y-%m-%d %H:%M:%S"
@@ -153,59 +165,73 @@ def list_announcements_by_course(course_id, user_id):
                 else "Unknown"
             )
 
-            # Prepare content with materials information
-            announcement_text = announcement.get("text", "No content provided.")
-            materials = announcement.get("materials", [])
-            materials_info = []
+            # Prepare content based on the type of item
+            if item["type"] == "announcement":
+                content = item.get("text", "No content provided.")
+                materials = item.get("materials", [])
+            elif item["type"] == "courseWorkMaterial":
+                content = item.get("title", "No title provided.")
+                materials = item.get("materials", [])
 
             # Format materials if they exist
+            materials_info = []
             for material in materials:
-                material_type = material.get(
-                    "driveFile", material.get("youtubeVideo", material.get("link", {}))
-                )
-                if "driveFile" in material:
-                    materials_info.append(
-                        f"📄 Drive File: {material['driveFile']['title']} (ID: {material['driveFile']['driveFile']['id']})"
-                    )
-                elif "youtubeVideo" in material:
-                    materials_info.append(
-                        f"🎥 YouTube Video: {material['youtubeVideo']['title']} (URL: {material['youtubeVideo']['alternateLink']})"
-                    )
-                elif "link" in material:
-                    materials_info.append(
-                        f"🔗 Link: {material['link']['title']} (URL: {material['link']['url']})"
-                    )
-                else:
-                    materials_info.append("📦 Unknown Material Type")
+                try:
+                    if "driveFile" in material:
+                        drive_file = material["driveFile"]
+                        title = drive_file.get("title", "Untitled")
+                        file_id = drive_file.get("driveFile", {}).get(
+                            "id", "Unknown ID"
+                        )
 
-            # Combine announcement text and materials
-            content = announcement_text
+                        drive_url = f"https://drive.google.com/file/d/{file_id}/view"
+                        materials_info.append(
+                            f"📄 Drive File: {title} (URL: {drive_url})"
+                        )
+                    elif "youtubeVideo" in material:
+                        youtube_video = material["youtubeVideo"]
+                        title = youtube_video.get("title", "Untitled")
+                        url = youtube_video.get("alternateLink", "Unknown URL")
+                        materials_info.append(f"🎥 YouTube Video: {title} (URL: {url})")
+                    elif "link" in material:
+                        link = material["link"]
+                        title = link.get("title", "Untitled")
+                        url = link.get("url", "Unknown URL")
+                        materials_info.append(f"🔗 Link: {title} (URL: {url})")
+                    else:
+                        materials_info.append("📦 Unknown Material Type")
+                except Exception as e:
+                    logger.error(f"Failed to process material: {e}")
+                    logger.debug(
+                        f"Material data: {material}"
+                    )  # Log the problematic material
+
+            # Combine content and materials
             if materials_info:
-                content += "\n\n**Materials:**\n" + "\n".join(materials_info)
+                content += "\n**Materials:**\n" + "\n".join(materials_info)
 
-            # Create announcement dictionary
-            announcements.append(
+            # Create item dictionary
+            top_items.append(
                 {
-                    "title": f"Announcement {index}",
+                    "title": f"{item['type'].capitalize()} {index}",
                     "content": content,
                     "posted_date": posted_date,
+                    "type": item["type"],
                 }
             )
 
-        if not announcements:
-            logger.info(f"No announcements found for course {course_id}.")
+        if not top_items:
+            logger.info(f"No items found for course {course_id}.")
             return []
 
-        logger.info(
-            f"Fetched {len(announcements)} announcements for course {course_id}."
-        )
-        return announcements
+        logger.info(f"Fetched {len(top_items)} top items for course {course_id}.")
+        return top_items
 
     except HttpError as e:
         logger.error(f"Google API error: {e}")
         raise
     except Exception as e:
-        logger.error(f"Failed to fetch announcements: {e}")
+        logger.error(f"Failed to fetch items: {e}")
         raise
 
 
