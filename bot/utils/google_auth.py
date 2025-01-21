@@ -85,7 +85,7 @@ def delete_token(client_id):
 
     except requests.RequestException as e:
         logger.error(f"Failed to delete token: {e}")
-        return {"error": f"Failed to delete token:{e.response.json()["error"]}"}
+        return {"error": f"Failed to delete token:{e.response.json()['error']}"}
 
 
 # Get the credentials for a particular user if they exist, otherwise start the OAuth flow and return the auth URL
