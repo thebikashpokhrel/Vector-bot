@@ -120,7 +120,7 @@ class ClassroomCog(commands.Cog):
             announcements_list = "\n\n".join(
                 [
                     f"**Title**: {ann['title']}\n"
-                    f"**Description**:{ann["description"] if ann['description'] else 'No description'}\n"
+                    f"**Description**:{ann['description'] if ann['description'] else 'No description'}\n"
                     f"**Content**: {ann['content'] if ann['content'] else 'No content'}\n"
                     f"**Posted On**: {ann['posted_date']}\n"
                     for ann in announcements
