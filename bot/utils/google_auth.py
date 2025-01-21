@@ -24,7 +24,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/classroom.announcements",
     "https://www.googleapis.com/auth/classroom.courseworkmaterials.readonly",
 ]
-BACKEND_URL = "http://localhost:8001"
+BACKEND_URL = os.getenv("BACKENDURL")
 
 
 # Load token from backend and convert it to Credentials Object
